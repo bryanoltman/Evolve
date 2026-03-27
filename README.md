@@ -4,6 +4,8 @@
 
 https://pmotschmann.github.io/Evolve/
 
+Personal fork with cloud sync: https://bryanoltman.com/Evolve/
+
 ## About
 
 An incremental game about evolving a civilization from primordial ooze into a space faring empire.
@@ -80,3 +82,62 @@ docker build . -t evolve
 # Run evolve server. Default address: http://localhost:8080/
 docker run --name evolve -p 8080:80 -d evolve
 ```
+
+## Cloud Sync (Personal Fork)
+
+This fork adds optional cloud save synchronization via Firebase, so game progress syncs between multiple computers without manual export/import.
+
+### How It Works
+- Signs in with Google via Firebase Auth
+- Uploads saves to Firestore every ~60 seconds during gameplay
+- On page load, compares cloud vs local save timestamps and prompts if the cloud save is newer
+- UI in Settings tab: sign in/out, manual upload/download, sync status
+
+### Setup
+
+1. Create a Firebase project at https://console.firebase.google.com/
+2. Enable **Authentication** > Sign-in method > **Google**
+3. Create a **Firestore** database (production mode)
+4. Set Firestore security rules:
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /saves/{userId} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+   }
+   ```
+5. Under Authentication > Settings > Authorized domains, add your deployment domain and `localhost`
+6. Copy your Firebase config values into `src/sync-config.js`
+7. Rebuild: `npm run build`
+
+Without a configured Firebase project, the sync feature is inert (no errors, no network calls).
+
+### Deployment to GitHub Pages
+
+```bash
+# Build
+cd /Users/bryanoltman/Documents/Evolve
+npm run build
+
+# Copy to GitHub Pages repo
+DEST=/Users/bryanoltman/Documents/bryanoltman.github.io/Evolve
+rm -rf "$DEST"
+mkdir -p "$DEST/evolve" "$DEST/wiki" "$DEST/lib" "$DEST/font" "$DEST/strings"
+cp index.html save.html wiki.html evolved.ico evolved-light.ico LICENSE "$DEST/"
+cp -r evolve/* "$DEST/evolve/"
+cp -r wiki/* "$DEST/wiki/"
+cp -r lib/* "$DEST/lib/"
+cp -r font/* "$DEST/font/"
+cp -r strings/* "$DEST/strings/"
+
+# Commit and push
+cd /Users/bryanoltman/Documents/bryanoltman.github.io
+git add Evolve/
+git commit -m "Update Evolve"
+git push
+```
+
+Serves at `bryanoltman.com/Evolve/` (CNAME already configured on the GitHub Pages repo).

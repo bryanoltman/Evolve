@@ -15,11 +15,13 @@ import { renderEdenic } from './edenic.js';
 import { drawShipYard, clearShipDrag, renderTauCeti } from './truepath.js';
 import { arpa, clearGeneticsDrag } from './arpa.js';
 
+import { signIn, signOut, uploadSave, downloadSave, getSyncState } from './sync.js';
 export function mainVue(){
     vBind({
         el: '#mainColumn div:first-child',
         data: {
-            s: global.settings
+            s: global.settings,
+            sync: getSyncState()
         },
         methods: {
             swapTab(tab){
@@ -27,6 +29,22 @@ export function mainVue(){
                     loadTab(tab);
                 }
                 return tab;
+            },
+            cloudSignIn(){
+                signIn();
+            },
+            cloudSignOut(){
+                signOut();
+            },
+            cloudSyncNow(){
+                uploadSave();
+            },
+            cloudLoadNow(){
+                downloadSave();
+            },
+            formatSyncTime(){
+                if (!this.sync.lastSync) { return ''; }
+                return new Date(this.sync.lastSync).toLocaleTimeString();
             },
             saveImport(){
                 if ($('#importExport').val().length > 0){
@@ -1438,6 +1456,27 @@ export function index(){
         </div>
         <div class="stringPack setting">
             <span>{{  | sPack}}</span>
+        </div>
+        <div class="importExport">
+            <b-field label="Cloud Sync">
+                <div v-if="sync.signedIn">
+                    <span>Signed in as {{ sync.email }}</span>
+                    <div style="margin-top: 0.5rem;">
+                        <button class="button" @click="cloudSyncNow">Upload Save</button>
+                        <button class="button" @click="cloudLoadNow">Download Save</button>
+                        <button class="button" @click="cloudSignOut">Sign Out</button>
+                    </div>
+                    <div v-if="sync.lastSync" style="margin-top: 0.5rem;">
+                        <span>Last synced: {{ formatSyncTime() }}</span>
+                    </div>
+                    <div v-if="sync.error" class="has-text-danger" style="margin-top: 0.5rem;">
+                        <span>{{ sync.error }}</span>
+                    </div>
+                </div>
+                <div v-else>
+                    <button class="button" @click="cloudSignIn">Sign in with Google</button>
+                </div>
+            </b-field>
         </div>
         <div class="importExport">
             <b-field label="${loc('import_export')}">

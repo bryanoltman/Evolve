@@ -3,7 +3,7 @@
 Browser-based incremental/idle game (v1.4.9, MPL-2.0).
 Upstream: github.com/pmotschmann/Evolve
 
-Single-page app, no backend — all state in localStorage.
+Single-page app — all state in localStorage. Cloud sync via Firebase (optional).
 Two entry points: game (`index.html`) and wiki (`wiki.html`).
 
 ## Tech Stack
@@ -29,12 +29,14 @@ Two entry points: game (`index.html`) and wiki (`wiki.html`).
 ├── index.html          # Game entry point (loads CDN deps + evolve/main.js)
 ├── wiki.html           # Wiki entry point (loads wiki/wiki.js)
 ├── save.html           # Save export utility
-├── src/                # Source code (24 JS modules + LESS)
+├── src/                # Source code (26 JS modules + LESS)
 │   ├── main.js         # Game entry + game loop (13K lines)
 │   ├── vars.js         # Global mutable state object
 │   ├── index.js        # Root Vue instance, tab management, save/load
 │   ├── functions.js    # Core utilities (vBind, popover, modRes, gameLoop)
 │   ├── locale.js       # i18n system (loc() function)
+│   ├── sync.js         # Cloud sync module (Firebase Auth + Firestore)
+│   ├── sync-config.js  # Firebase project config (user-specific, placeholder)
 │   ├── actions.js      # Building/structure definitions
 │   ├── tech.js         # Technology tree (largest file, 16K lines)
 │   ├── races.js        # Species, traits, biomes
@@ -61,7 +63,6 @@ Two entry points: game (`index.html`) and wiki (`wiki.html`).
 ├── strings/            # i18n locale JSON files (14 locales)
 ├── lib/                # Vendored third-party libraries
 └── font/               # Weather icon webfont
-```
 
 ## Architecture & Key Patterns
 
@@ -87,6 +88,14 @@ All run via Web Worker timer (`evolve/evolve.js` posts messages to trigger `exec
 **Resource system:** ~40 resources defined in `resources.js`. `modRes()` in `functions.js` handles resource changes. Resources have `amount`, `max`, `diff` (rate), `display` (visibility).
 
 **Save system:** Auto-saves every longLoop tick (~5s) via `save.setItem('evolved', LZString.compressToUTF16(JSON.stringify(global)))`. Export uses `LZString.compressToBase64()`. Import validates structure (`evolution`, `settings`, `stats`, `stats.plasmid` keys), applies migration patches, saves to localStorage, reloads page. Backup stored under `evolveBak` key before prestige resets.
+
+**Cloud sync (personal fork addition):** Optional Firebase-based sync in `src/sync.js`. When configured:
+- On page load: compares cloud save timestamp vs `global.stats.current`; prompts user if cloud is newer
+- During play: uploads save to Firestore every ~60 seconds (every 12th longLoop tick)
+- Firestore document: `/saves/{uid}` with `saveData` (LZString base64), `timestamp`, `version`
+- Auth: Google Sign-In via Firebase Auth (session persisted in IndexedDB by Firebase)
+- UI: "Cloud Sync" section in Settings tab (sign in/out, upload/download, status)
+- Gracefully no-ops when `src/sync-config.js` has placeholder values or Firebase SDK fails to load
 
 ## Key Conventions
 
@@ -127,3 +136,56 @@ locale.js        105    # i18n loader
 debug.js          48    # Debug tools
 evolve.less    5,513    # Game stylesheet
 ```
+
+## Cloud Sync Setup
+
+This fork adds optional cloud save sync via Firebase. To enable it:
+
+1. Create a Firebase project at https://console.firebase.google.com/
+2. Enable Authentication > Sign-in method > Google
+3. Create a Firestore database in production mode
+4. Set Firestore security rules:
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /saves/{userId} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+   }
+   ```
+5. Add authorized domains: your deployment domain + `localhost`
+6. Copy Firebase config into `src/sync-config.js`
+7. Rebuild: `npm run build`
+
+Files involved: `src/sync.js`, `src/sync-config.js`, `index.html` (Firebase CDN scripts), `src/main.js` (init + loop hook), `src/index.js` (Settings UI).
+
+## Deployment to GitHub Pages (bryanoltman.com/Evolve/)
+
+The game is deployed by copying build artifacts into the `bryanoltman.github.io` repo:
+
+```bash
+# 1. Build in the Evolve repo
+cd /Users/bryanoltman/Documents/Evolve
+npm run build
+
+# 2. Copy to GitHub Pages repo
+DEST=/Users/bryanoltman/Documents/bryanoltman.github.io/Evolve
+rm -rf "$DEST"
+mkdir -p "$DEST/evolve" "$DEST/wiki" "$DEST/lib" "$DEST/font" "$DEST/strings"
+cp index.html save.html wiki.html evolved.ico evolved-light.ico LICENSE "$DEST/"
+cp -r evolve/* "$DEST/evolve/"
+cp -r wiki/* "$DEST/wiki/"
+cp -r lib/* "$DEST/lib/"
+cp -r font/* "$DEST/font/"
+cp -r strings/* "$DEST/strings/"
+
+# 3. Commit and push
+cd /Users/bryanoltman/Documents/bryanoltman.github.io
+git add Evolve/
+git commit -m "Update Evolve"
+git push
+```
+
+The site serves at `bryanoltman.com/Evolve/` (CNAME already configured).
