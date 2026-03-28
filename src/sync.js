@@ -12,12 +12,14 @@ const syncState = {
 let db = null;
 let auth = null;
 let initialized = false;
+let hasCheckedCloud = false;
 
 function isConfigured() {
     return firebaseConfig.apiKey !== "REPLACE_ME" && firebaseConfig.projectId !== "REPLACE_ME";
 }
 
 // Initialize Firebase app, auth, and Firestore. Safe to call multiple times.
+// On every sign-in (returning session or fresh), checks cloud save automatically.
 export function initSync() {
     if (initialized || !isConfigured()) {
         return;
@@ -37,10 +39,17 @@ export function initSync() {
                 syncState.signedIn = true;
                 syncState.email = user.email;
                 syncState.error = null;
+
+                // Check cloud save once per sign-in session.
+                if (!hasCheckedCloud) {
+                    hasCheckedCloud = true;
+                    performCloudCheck();
+                }
             } else {
                 syncState.signedIn = false;
                 syncState.email = null;
                 syncState.lastSync = null;
+                hasCheckedCloud = false;
             }
         });
     } catch (e) {
@@ -119,59 +128,50 @@ export function downloadSave() {
     });
 }
 
-// Compare cloud save timestamp vs local, prompt user if cloud is newer.
-// Called once after sign-in is detected on page load.
-export function checkCloudSave() {
-    if (!initialized) { return; }
+// Fetch cloud save, compare timestamps, and either load cloud or upload local.
+// Called automatically on every sign-in via onAuthStateChanged.
+function performCloudCheck() {
+    fetchCloudSave().then(function(cloudData) {
+        if (!cloudData || !cloudData.saveData) {
+            // No cloud save — upload local state.
+            uploadSave();
+            return;
+        }
 
-    // Wait for auth state to settle, then check.
-    // Firebase auth state may not be ready immediately; onAuthStateChanged fires asynchronously.
-    const unsubscribe = auth.onAuthStateChanged(function(user) {
-        unsubscribe(); // Only run once.
-        if (!user) { return; }
+        const cloudTime = cloudData.timestamp || 0;
+        const localTime = global.stats.current || 0;
 
-        fetchCloudSave().then(function(cloudData) {
-            if (!cloudData || !cloudData.saveData) {
-                // No cloud save — upload local state.
-                uploadSave();
-                return;
-            }
-
-            const cloudTime = cloudData.timestamp || 0;
-            const localTime = global.stats.current || 0;
-
-            if (cloudTime > localTime) {
-                // Cloud save is newer — prompt user.
-                const cloudDate = new Date(cloudTime).toLocaleString();
-                if (typeof Vue !== 'undefined' && Vue.prototype.$buefy) {
-                    Vue.prototype.$buefy.dialog.confirm({
-                        title: 'Cloud Save Found',
-                        message: `A newer cloud save was found (from ${cloudDate}). Load it?<br><br>Choosing "Cancel" will overwrite the cloud with your local save.`,
-                        confirmText: 'Load Cloud Save',
-                        cancelText: 'Keep Local',
-                        type: 'is-info',
-                        hasIcon: true,
-                        ariaModal: true,
-                        onConfirm: function() {
-                            window.importGame(cloudData.saveData);
-                        },
-                        onCancel: function() {
-                            uploadSave();
-                        }
-                    });
-                } else {
-                    // Fallback if Buefy is not available.
-                    if (confirm('A newer cloud save was found (from ' + cloudDate + '). Load it?')) {
+        if (cloudTime > localTime) {
+            // Cloud save is newer — prompt user.
+            const cloudDate = new Date(cloudTime).toLocaleString();
+            if (typeof Vue !== 'undefined' && Vue.prototype.$buefy) {
+                Vue.prototype.$buefy.dialog.confirm({
+                    title: 'Cloud Save Found',
+                    message: `A newer cloud save was found (from ${cloudDate}). Load it?<br><br>Choosing "Cancel" will overwrite the cloud with your local save.`,
+                    confirmText: 'Load Cloud Save',
+                    cancelText: 'Keep Local',
+                    type: 'is-info',
+                    hasIcon: true,
+                    ariaModal: true,
+                    onConfirm: function() {
                         window.importGame(cloudData.saveData);
-                    } else {
+                    },
+                    onCancel: function() {
                         uploadSave();
                     }
-                }
+                });
             } else {
-                // Local is same or newer — upload to cloud.
-                uploadSave();
+                // Fallback if Buefy is not available.
+                if (confirm('A newer cloud save was found (from ' + cloudDate + '). Load it?')) {
+                    window.importGame(cloudData.saveData);
+                } else {
+                    uploadSave();
+                }
             }
-        });
+        } else {
+            // Local is same or newer — upload to cloud.
+            uploadSave();
+        }
     });
 }
 

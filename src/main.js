@@ -22,7 +22,7 @@ import { index, mainVue, initTabs, loadTab } from './index.js';
 import { setWeather, seasonDesc, astrologySign, astroVal } from './seasons.js';
 import { getTopChange } from './wiki/change.js';
 import { enableDebug, updateDebugData } from './debug.js';
-import { initSync, uploadSave, checkCloudSave } from './sync.js';
+import { initSync, uploadSave } from './sync.js';
 
 {
     $(document).ready(function() {
@@ -207,7 +207,6 @@ if (global.r_queue.display){
 
 mainVue();
 initSync();
-checkCloudSave();
 
 if (global['new']){
     messageQueue(loc('new'), 'warning',false,['progress']);
