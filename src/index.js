@@ -46,6 +46,34 @@ export function mainVue(){
                 if (!this.sync.lastSync) { return ''; }
                 return new Date(this.sync.lastSync).toLocaleTimeString();
             },
+            loadSaveEditor(){
+                $('#saveEditor').val(JSON.stringify(global, null, 2));
+            },
+            applySaveEditor(){
+                let raw = $('#saveEditor').val();
+                let parsed;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch (e) {
+                    this.$buefy.dialog.alert({ title: 'Invalid JSON', message: e.message, type: 'is-danger' });
+                    return;
+                }
+                if (!parsed.evolution || !parsed.settings || !parsed.stats || !parsed.stats.plasmid) {
+                    this.$buefy.dialog.alert({ title: 'Invalid Save', message: 'Missing required keys (evolution, settings, stats, stats.plasmid).', type: 'is-danger' });
+                    return;
+                }
+                this.$buefy.dialog.confirm({
+                    title: 'Apply Edited Save?',
+                    message: 'This will overwrite your current game state and reload the page.',
+                    type: 'is-warning',
+                    hasIcon: true,
+                    ariaModal: true,
+                    onConfirm: function() {
+                        save.setItem('evolved', LZString.compressToUTF16(JSON.stringify(parsed)));
+                        window.location.reload();
+                    }
+                });
+            },
             saveImport(){
                 if ($('#importExport').val().length > 0){
                     importGame($('#importExport').val());
@@ -1500,6 +1528,18 @@ export function index(){
                             <button class="button right" :disabled="!s.disableReset" @click="reset()"><span class="settings3" aria-label="${loc('settings3')}">{{ 'reset_hard' | label }}</span></button>
                         </p>
                     </div>
+                </div>
+            </b-collapse>
+        </div>
+        <div class="reset">
+            <b-collapse :open="false">
+                <template slot="trigger" slot-scope="props">
+                    <a style="font-size: 0.85rem; opacity: 0.6;">{{ props.open ? 'Hide' : 'Edit Save Data' }}</a>
+                </template>
+                <div style="margin-top: 0.5rem;">
+                    <button class="button is-small" @click="loadSaveEditor">Load Current State</button>
+                    <textarea id="saveEditor" style="width: 100%; height: 300px; margin-top: 0.5rem; font-family: monospace; font-size: 0.75rem; tab-size: 2;"></textarea>
+                    <button class="button is-small is-warning" @click="applySaveEditor">Apply Changes</button>
                 </div>
             </b-collapse>
         </div>
