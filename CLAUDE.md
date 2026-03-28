@@ -21,6 +21,7 @@ Two entry points: game (`index.html`) and wiki (`wiki.html`).
 - `npm run build-debug` — debug build with sourcemaps
 - `npm run serve` — dev server on localhost:4400
 - `npm run deploy` — deploy to GitHub Pages via gh-pages
+- `npm run deploy-pages` — build + deploy to bryanoltman.com/Evolve/ (runs `deploy.sh`)
 - Individual: `npm run evolve`, `npm run wiki`, `npm run evolve-less`, `npm run wiki-less`
 
 ## Directory Layout
@@ -163,29 +164,8 @@ Files involved: `src/sync.js`, `src/sync-config.js`, `index.html` (Firebase CDN 
 
 ## Deployment to GitHub Pages (bryanoltman.com/Evolve/)
 
-The game is deployed by copying build artifacts into the `bryanoltman.github.io` repo:
-
 ```bash
-# 1. Build in the Evolve repo
-cd /Users/bryanoltman/Documents/Evolve
-npm run build
-
-# 2. Copy to GitHub Pages repo
-DEST=/Users/bryanoltman/Documents/bryanoltman.github.io/Evolve
-rm -rf "$DEST"
-mkdir -p "$DEST/evolve" "$DEST/wiki" "$DEST/lib" "$DEST/font" "$DEST/strings"
-cp index.html save.html wiki.html evolved.ico evolved-light.ico LICENSE "$DEST/"
-cp -r evolve/* "$DEST/evolve/"
-cp -r wiki/* "$DEST/wiki/"
-cp -r lib/* "$DEST/lib/"
-cp -r font/* "$DEST/font/"
-cp -r strings/* "$DEST/strings/"
-
-# 3. Commit and push
-cd /Users/bryanoltman/Documents/bryanoltman.github.io
-git add Evolve/
-git commit -m "Update Evolve"
-git push
+npm run deploy-pages
 ```
 
-The site serves at `bryanoltman.com/Evolve/` (CNAME already configured).
+This runs `deploy.sh`, which builds, copies artifacts to `bryanoltman.github.io/Evolve/`, commits, and pushes. One command.

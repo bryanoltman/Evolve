@@ -118,26 +118,7 @@ Without a configured Firebase project, the sync feature is inert (no errors, no 
 ### Deployment to GitHub Pages
 
 ```bash
-# Build
-cd /Users/bryanoltman/Documents/Evolve
-npm run build
-
-# Copy to GitHub Pages repo
-DEST=/Users/bryanoltman/Documents/bryanoltman.github.io/Evolve
-rm -rf "$DEST"
-mkdir -p "$DEST/evolve" "$DEST/wiki" "$DEST/lib" "$DEST/font" "$DEST/strings"
-cp index.html save.html wiki.html evolved.ico evolved-light.ico LICENSE "$DEST/"
-cp -r evolve/* "$DEST/evolve/"
-cp -r wiki/* "$DEST/wiki/"
-cp -r lib/* "$DEST/lib/"
-cp -r font/* "$DEST/font/"
-cp -r strings/* "$DEST/strings/"
-
-# Commit and push
-cd /Users/bryanoltman/Documents/bryanoltman.github.io
-git add Evolve/
-git commit -m "Update Evolve"
-git push
+npm run deploy-pages
 ```
 
-Serves at `bryanoltman.com/Evolve/` (CNAME already configured on the GitHub Pages repo).
+This runs `deploy.sh`, which builds, copies artifacts to the `bryanoltman.github.io` repo's `Evolve/` directory, commits, and pushes. Serves at `bryanoltman.com/Evolve/`.
