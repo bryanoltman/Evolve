@@ -22,7 +22,7 @@ import { index, mainVue, initTabs, loadTab } from './index.js';
 import { setWeather, seasonDesc, astrologySign, astroVal } from './seasons.js';
 import { getTopChange } from './wiki/change.js';
 import { enableDebug, updateDebugData } from './debug.js';
-import { initSync, uploadSave } from './sync.js';
+import { initSync, syncUpload } from './sync.js';
 
 {
     $(document).ready(function() {
@@ -12831,7 +12831,7 @@ function longLoop(){
     cloudSyncCounter++;
     if (cloudSyncCounter >= 12) {
         cloudSyncCounter = 0;
-        uploadSave();
+        syncUpload();
     }
 
     if (global.race.species !== 'protoplasm' && (global.stats.days + global.stats.tdays) % 100000 === 99999){

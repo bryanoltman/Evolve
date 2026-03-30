@@ -91,8 +91,10 @@ All run via Web Worker timer (`evolve/evolve.js` posts messages to trigger `exec
 **Save system:** Auto-saves every longLoop tick (~5s) via `save.setItem('evolved', LZString.compressToUTF16(JSON.stringify(global)))`. Export uses `LZString.compressToBase64()`. Import validates structure (`evolution`, `settings`, `stats`, `stats.plasmid` keys), applies migration patches, saves to localStorage, reloads page. Backup stored under `evolveBak` key before prestige resets.
 
 **Cloud sync (personal fork addition):** Optional Firebase-based sync in `src/sync.js`. When configured:
-- On page load: compares cloud save timestamp vs `global.stats.current`; prompts user if cloud is newer
-- During play: uploads save to Firestore every ~60 seconds (every 12th longLoop tick)
+- On sign-in: compares cloud save timestamp vs `lastUploadedTimestamp` (persisted in `localStorage` key `evolveLastSync`); prompts user if cloud is newer
+- During play: every ~60 seconds (12th longLoop tick), `syncUpload()` fetches the cloud save and compares its timestamp to `lastUploadedTimestamp`. If another session uploaded since this one last did, prompts the user instead of overwriting. Skips upload entirely when the tab is hidden (`document.visibilityState`).
+- Conflict dialog: user can "Load Cloud Save" (imports cloud, reloads page) or "Keep Local" (overwrites cloud with local state). While the dialog is visible, periodic uploads are blocked (`blockUploads` flag).
+- Manual "Upload Save" / "Download Save" buttons bypass conflict detection (explicit user intent).
 - Firestore document: `/saves/{uid}` with `saveData` (LZString base64), `timestamp`, `version`
 - Auth: Google Sign-In via Firebase Auth (session persisted in IndexedDB by Firebase)
 - UI: "Cloud Sync" section in Settings tab (sign in/out, upload/download, status)
