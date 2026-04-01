@@ -91,10 +91,11 @@ All run via Web Worker timer (`evolve/evolve.js` posts messages to trigger `exec
 **Save system:** Auto-saves every longLoop tick (~5s) via `save.setItem('evolved', LZString.compressToUTF16(JSON.stringify(global)))`. Export uses `LZString.compressToBase64()`. Import validates structure (`evolution`, `settings`, `stats`, `stats.plasmid` keys), applies migration patches, saves to localStorage, reloads page. Backup stored under `evolveBak` key before prestige resets.
 
 **Cloud sync (personal fork addition):** Optional Firebase-based sync in `src/sync.js`. When configured:
-- On sign-in: compares cloud save timestamp vs `lastUploadedTimestamp` (persisted in `localStorage` key `evolveLastSync`); prompts user if cloud is newer
-- During play: every ~60 seconds (12th longLoop tick), `syncUpload()` fetches the cloud save and compares its timestamp to `lastUploadedTimestamp`. If another session uploaded since this one last did, prompts the user instead of overwriting. Skips upload entirely when the tab is hidden (`document.visibilityState`).
-- Conflict dialog: user can "Load Cloud Save" (imports cloud, reloads page) or "Keep Local" (overwrites cloud with local state). While the dialog is visible, periodic uploads are blocked (`blockUploads` flag).
-- Manual "Upload Save" / "Download Save" buttons bypass conflict detection (explicit user intent).
+- Automatic conflict resolution: newest save always wins, no user prompt. `reconcileWithCloud()` fetches the cloud save, compares its `timestamp` to `lastUploadedTimestamp` (persisted in `localStorage` key `evolveLastSync`), and either imports the cloud save (page reloads) or uploads the local save.
+- On sign-in: reconciles immediately via `onAuthStateChanged`.
+- On tab focus: `visibilitychange` listener triggers reconciliation whenever the tab becomes visible. Covers resume from sleep and switching back from another tab.
+- During play: every ~60 seconds (12th longLoop tick), `syncUpload()` calls `reconcileWithCloud()`. Skips entirely when the tab is hidden (`document.visibilityState`).
+- Manual "Upload Save" / "Download Save" buttons call `uploadSave()` / `downloadSave()` directly (explicit user intent, no cloud check).
 - Firestore document: `/saves/{uid}` with `saveData` (LZString base64), `timestamp`, `version`
 - Auth: Google Sign-In via Firebase Auth (session persisted in IndexedDB by Firebase)
 - UI: "Cloud Sync" section in Settings tab (sign in/out, upload/download, status)

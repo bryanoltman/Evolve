@@ -22,7 +22,7 @@ import { index, mainVue, initTabs, loadTab } from './index.js';
 import { setWeather, seasonDesc, astrologySign, astroVal } from './seasons.js';
 import { getTopChange } from './wiki/change.js';
 import { enableDebug, updateDebugData } from './debug.js';
-import { initSync, syncUpload } from './sync.js';
+import { initSync } from './sync.js';
 
 {
     $(document).ready(function() {
@@ -11530,7 +11530,6 @@ let sythMap = {
 };
 
 var kplv = 60;
-var cloudSyncCounter = 0;
 function longLoop(){
     const date = new Date();
     const astroSign = astrologySign();
@@ -12827,12 +12826,6 @@ function longLoop(){
         save.setItem('evolved',LZString.compressToUTF16(JSON.stringify(global)));
     }
 
-    // Cloud sync every ~60 seconds (12 longLoop iterations at ~5s each)
-    cloudSyncCounter++;
-    if (cloudSyncCounter >= 12) {
-        cloudSyncCounter = 0;
-        syncUpload();
-    }
 
     if (global.race.species !== 'protoplasm' && (global.stats.days + global.stats.tdays) % 100000 === 99999){
         messageQueue(loc(`backup_warning`), 'advanced', true);

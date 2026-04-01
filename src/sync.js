@@ -18,8 +18,8 @@ let hasCheckedCloud = false;
 // Persisted in localStorage so it survives page reload / crash.
 let lastUploadedTimestamp = Number(localStorage.getItem('evolveLastSync')) || 0;
 
-// True while a conflict dialog is showing — prevents stacked dialogs and blind uploads.
-let blockUploads = false;
+// Guards against concurrent reconciliation (fetch in flight).
+let syncing = false;
 
 const LAST_SYNC_KEY = 'evolveLastSync';
 
@@ -28,7 +28,7 @@ function isConfigured() {
 }
 
 // Initialize Firebase app, auth, and Firestore. Safe to call multiple times.
-// On every sign-in (returning session or fresh), checks cloud save automatically.
+// On every sign-in (returning session or fresh), reconciles with cloud automatically.
 export function initSync() {
     if (initialized || !isConfigured()) {
         return;
@@ -49,10 +49,11 @@ export function initSync() {
                 syncState.email = user.email;
                 syncState.error = null;
 
-                // Check cloud save once per sign-in session.
+                // Reconcile once per sign-in session from this callback.
+                // Subsequent checks happen via visibilitychange and periodic sync.
                 if (!hasCheckedCloud) {
                     hasCheckedCloud = true;
-                    performCloudCheck();
+                    reconcileWithCloud();
                 }
             } else {
                 syncState.signedIn = false;
@@ -61,6 +62,20 @@ export function initSync() {
                 hasCheckedCloud = false;
             }
         });
+
+        // When the tab becomes visible, reconcile immediately.
+        // Covers: resume from sleep, switching back from another tab/window.
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'visible' && syncState.signedIn) {
+                    reconcileWithCloud();
+                }
+            });
+        }
+
+        // Periodic reconciliation every 60s. reconcileWithCloud() gates on
+        // visibility, auth, and the syncing flag, so this is safe to fire blindly.
+        setInterval(reconcileWithCloud, 60000);
     } catch (e) {
         console.error('[sync] Firebase init failed:', e);
         syncState.error = 'Firebase initialization failed';
@@ -86,8 +101,8 @@ export function signOut() {
 }
 
 // Upload current game state to Firestore /saves/{uid}.
-// Direct upload with no conflict check — used by manual "Upload Save" button
-// and after the user has resolved a conflict (chose "Keep Local" or initial upload).
+// Direct upload with no cloud check — used by manual "Upload Save" button
+// and internally after reconciliation decides local is newer.
 export function uploadSave() {
     if (!db || !auth || !auth.currentUser) { return; }
     if (global.race && global.race['noexport']) { return; }
@@ -142,124 +157,44 @@ export function downloadSave() {
     });
 }
 
-// Show a conflict dialog letting the user choose between cloud and local saves.
-// Shared by performCloudCheck (on sign-in) and checkCloudBeforeUpload (periodic).
-function showConflictDialog(cloudData) {
-    const cloudTime = cloudData.timestamp || 0;
-    const cloudDate = new Date(cloudTime).toLocaleString();
+// Core sync logic. Fetches the cloud save, compares timestamps, and
+// automatically picks the newer state — no user prompt.
+//   cloud newer → import cloud save (page reloads)
+//   local newer → upload local save
+//   no cloud    → upload local save
+// Guarded by `syncing` to prevent concurrent fetches from stacking.
+function reconcileWithCloud() {
+    if (syncing) { return; }
+    if (!db || !auth || !auth.currentUser) { return; }
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') { return; }
 
-    function onConfirm() {
-        // User chose cloud — persist cloud timestamp so the post-reload check
-        // sees cloud timestamp <= lastUploadedTimestamp and doesn't re-prompt.
-        lastUploadedTimestamp = cloudTime;
-        localStorage.setItem(LAST_SYNC_KEY, String(cloudTime));
-        blockUploads = false;
-        window.importGame(cloudData.saveData);
-    }
-
-    function onCancel() {
-        // User explicitly chose local — overwrite cloud.
-        blockUploads = false;
-        uploadSave();
-    }
-
-    if (typeof Vue !== 'undefined' && Vue.prototype.$buefy) {
-        Vue.prototype.$buefy.dialog.confirm({
-            title: 'Cloud Save Found',
-            message: `A newer cloud save was found (from ${cloudDate}). Load it?<br><br>Choosing "Keep Local" will overwrite the cloud with your local save.`,
-            confirmText: 'Load Cloud Save',
-            cancelText: 'Keep Local',
-            type: 'is-info',
-            hasIcon: true,
-            ariaModal: true,
-            onConfirm: onConfirm,
-            onCancel: onCancel
-        });
-    } else {
-        // Fallback if Buefy is not available.
-        if (confirm('A newer cloud save was found (from ' + cloudDate + '). Load it? Choosing OK loads the cloud save. Choosing Cancel keeps your local save and overwrites the cloud.')) {
-            onConfirm();
-        } else {
-            onCancel();
-        }
-    }
-}
-
-// Fetch cloud save, compare timestamps, and either load cloud or upload local.
-// Called automatically on every sign-in via onAuthStateChanged.
-// If the tab is hidden at sign-in time, defers the check until the tab becomes visible.
-function performCloudCheck() {
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-        // Tab is in the background (e.g., restored session in a background tab).
-        // Defer the cloud check until the user actually looks at this tab.
-        function onVisible() {
-            if (document.visibilityState === 'visible') {
-                document.removeEventListener('visibilitychange', onVisible);
-                performCloudCheckNow();
-            }
-        }
-        document.addEventListener('visibilitychange', onVisible);
-        return;
-    }
-    performCloudCheckNow();
-}
-
-function performCloudCheckNow() {
+    syncing = true;
     fetchCloudSave().then(function(cloudData) {
         if (!cloudData || !cloudData.saveData) {
             // No cloud save — upload local state.
             uploadSave();
+            syncing = false;
             return;
         }
 
         const cloudTime = cloudData.timestamp || 0;
-
         if (cloudTime > lastUploadedTimestamp) {
-            // Cloud save is newer than our last upload — prompt user.
-            blockUploads = true;
-            showConflictDialog(cloudData);
+            // Cloud is newer — load it. importGame saves to localStorage and reloads,
+            // so `syncing` staying true is irrelevant (new page load resets everything).
+            lastUploadedTimestamp = cloudTime;
+            localStorage.setItem(LAST_SYNC_KEY, String(cloudTime));
+            window.importGame(cloudData.saveData);
         } else {
             // Local is same or newer — upload to cloud.
             uploadSave();
-        }
-    });
-}
-
-// Called from longLoop periodic sync. Replaces direct uploadSave() call.
-// Checks whether another session uploaded since we last did. If so, prompts
-// the user instead of blindly overwriting.
-export function syncUpload() {
-    if (blockUploads) { return; }
-    if (!db || !auth || !auth.currentUser) { return; }
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') { return; }
-
-    checkCloudBeforeUpload();
-}
-
-// Fetch cloud save and compare its timestamp to our last upload.
-// If another session uploaded since we last did, show a conflict dialog.
-// Otherwise, proceed with a normal upload.
-function checkCloudBeforeUpload() {
-    fetchCloudSave().then(function(cloudData) {
-        if (!cloudData || !cloudData.saveData) {
-            // No cloud save exists — safe to upload.
-            uploadSave();
-            return;
-        }
-
-        const cloudTime = cloudData.timestamp || 0;
-        if (cloudTime > lastUploadedTimestamp) {
-            // Another session uploaded since we last did — conflict.
-            blockUploads = true;
-            showConflictDialog(cloudData);
-        } else {
-            uploadSave();
+            syncing = false;
         }
     }).catch(function(e) {
-        // Network error — skip this cycle, try next time.
         console.warn('[sync] Cloud check failed, will retry next cycle:', e);
+        syncing = false;
     });
 }
+
 
 // Return a reference to the sync state object for UI binding.
 export function getSyncState() {
