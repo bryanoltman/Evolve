@@ -1,5 +1,6 @@
 import { global } from './vars.js';
 import { firebaseConfig } from './sync-config.js';
+import { messageQueue } from './functions.js';
 
 // Sync state — not persisted in the save file. Firebase Auth handles session persistence.
 const syncState = {
@@ -120,6 +121,7 @@ export function uploadSave() {
             syncState.error = null;
             lastUploadedTimestamp = now;
             localStorage.setItem(LAST_SYNC_KEY, String(now));
+            messageQueue('Game saved to cloud.', 'info', true);
         }).catch(function(e) {
             console.error('[sync] Upload failed:', e);
             syncState.error = 'Upload failed: ' + e.message;
