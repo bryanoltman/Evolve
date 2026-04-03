@@ -91,12 +91,12 @@ All run via Web Worker timer (`evolve/evolve.js` posts messages to trigger `exec
 **Save system:** Auto-saves every longLoop tick (~5s) via `save.setItem('evolved', LZString.compressToUTF16(JSON.stringify(global)))`. Export uses `LZString.compressToBase64()`. Import validates structure (`evolution`, `settings`, `stats`, `stats.plasmid` keys), applies migration patches, saves to localStorage, reloads page. Backup stored under `evolveBak` key before prestige resets.
 
 **Cloud sync (personal fork addition):** Optional Firebase-based sync in `src/sync.js`. When configured:
-- Automatic conflict resolution: newest save always wins, no user prompt. `reconcileWithCloud()` fetches the cloud save, compares its `timestamp` to `lastUploadedTimestamp` (persisted in `localStorage` key `evolveLastSync`), and either imports the cloud save (page reloads) or uploads the local save.
+- Device identity: each browser persists a UUID in `localStorage` key `evolveDeviceId`. Every cloud upload includes this `deviceId`. On reconciliation, if the cloud save's `deviceId` matches ours, the download is skipped — this device authored that save, so local state is same or newer. Only saves from *other* devices trigger a cloud-to-local import.
 - On sign-in: reconciles immediately via `onAuthStateChanged`.
 - On tab focus: `visibilitychange` listener triggers reconciliation whenever the tab becomes visible. Covers resume from sleep and switching back from another tab.
 - During play: every ~60 seconds (12th longLoop tick), `syncUpload()` calls `reconcileWithCloud()`. Skips entirely when the tab is hidden (`document.visibilityState`).
 - Manual "Upload Save" / "Download Save" buttons call `uploadSave()` / `downloadSave()` directly (explicit user intent, no cloud check).
-- Firestore document: `/saves/{uid}` with `saveData` (LZString base64), `timestamp`, `version`
+- Firestore document: `/saves/{uid}` with `saveData` (LZString base64), `timestamp`, `version`, `deviceId`
 - Auth: Google Sign-In via Firebase Auth (session persisted in IndexedDB by Firebase)
 - UI: "Cloud Sync" section in Settings tab (sign in/out, upload/download, status)
 - Gracefully no-ops when `src/sync-config.js` has placeholder values or Firebase SDK fails to load

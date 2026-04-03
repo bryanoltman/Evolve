@@ -23,6 +23,25 @@ let lastUploadedTimestamp = Number(localStorage.getItem('evolveLastSync')) || 0;
 let syncing = false;
 
 const LAST_SYNC_KEY = 'evolveLastSync';
+const DEVICE_ID_KEY = 'evolveDeviceId';
+
+// Stable identifier for this browser/device. If this device wrote the cloud
+// save, reconciliation always uploads — never downloads its own stale data.
+const deviceId = getOrCreateDeviceId();
+
+function getOrCreateDeviceId() {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+        id = typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+}
 
 function isConfigured() {
     return firebaseConfig.apiKey !== "REPLACE_ME" && firebaseConfig.projectId !== "REPLACE_ME";
@@ -115,7 +134,8 @@ export function uploadSave() {
         db.collection('saves').doc(uid).set({
             saveData: saveData,
             timestamp: now,
-            version: global['version'] || 'unknown'
+            version: global['version'] || 'unknown',
+            deviceId: deviceId
         }).then(function() {
             syncState.lastSync = now;
             syncState.error = null;
@@ -161,9 +181,10 @@ export function downloadSave() {
 
 // Core sync logic. Fetches the cloud save, compares timestamps, and
 // automatically picks the newer state — no user prompt.
-//   cloud newer → import cloud save (page reloads)
-//   local newer → upload local save
-//   no cloud    → upload local save
+//   cloud from this device → always upload (local is same or newer)
+//   cloud from other device and newer → import cloud save (page reloads)
+//   cloud from other device and older → upload local save
+//   no cloud → upload local save
 // Guarded by `syncing` to prevent concurrent fetches from stacking.
 function reconcileWithCloud() {
     if (syncing) { return; }
@@ -179,9 +200,19 @@ function reconcileWithCloud() {
             return;
         }
 
+        // If the cloud save came from this device, our local state is
+        // authoritative — it is the same or has advanced since that upload.
+        // Downloading our own save back would revert local progress.
+        if (cloudData.deviceId === deviceId) {
+            uploadSave();
+            syncing = false;
+            return;
+        }
+
         const cloudTime = cloudData.timestamp || 0;
         if (cloudTime > lastUploadedTimestamp) {
-            // Cloud is newer — load it. importGame saves to localStorage and reloads,
+            // Cloud is newer, from another device — load it.
+            // importGame saves to localStorage and reloads,
             // so `syncing` staying true is irrelevant (new page load resets everything).
             lastUploadedTimestamp = cloudTime;
             localStorage.setItem(LAST_SYNC_KEY, String(cloudTime));
