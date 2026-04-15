@@ -11164,9 +11164,6 @@ function midLoop(){
             }
         }
 
-        if (global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 8){
-            buildGene(blockGeneBuffer);
-        }
 
         if (p_on['soul_forge']){
             vBind({el: `#fort`},'update');
@@ -11272,6 +11269,9 @@ function midLoop(){
                             }
                         }
                         else {
+                            if (!stop && t_time <= 1 && t_action.cost && t_action.cost['Knowledge']){
+                                blockGeneBuffer = true;
+                            }
                             time += t_time;
                         }
                         if (!global.settings.qAny){
@@ -11412,6 +11412,10 @@ function midLoop(){
             global.queue.queue = merged_queue;
             buildQueue();
         }
+    }
+
+    if (global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 8){
+        buildGene(blockGeneBuffer);
     }
 
     resourceAlt();
