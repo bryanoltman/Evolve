@@ -1314,7 +1314,8 @@ if (!global['settings']){
         cLabels: true,
         theme: 'gruvboxDark',
         locale: 'en-US',
-        icon: 'star'
+        icon: 'star',
+        gameSpeed: 1
     };
 }
 
@@ -1360,6 +1361,10 @@ if (!global.settings.hasOwnProperty('touch')){
 
 if (!global.settings.hasOwnProperty('lowPowerBalance')){
     global.settings['lowPowerBalance'] = false;
+}
+
+if (![1,2,4,8,16].includes(global.settings.gameSpeed)){
+    global.settings['gameSpeed'] = 1;
 }
 
 if (!global['queue']){

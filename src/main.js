@@ -565,8 +565,14 @@ vBind({
         showSim(){
             return global['sim'] ? true : false;
         },
+        effectiveSpeed(){
+            // The real speed of time: the player's chosen multiplier, doubled while banked accelerated time
+            // is being spent (matches the aTimeMultiplier in loopTimers()). global.settings.at mirrors
+            // atrack.t and is reactive, so the trigger updates live as accelerated time drains.
+            return global.settings.gameSpeed * (global.settings.at > 0 ? loopTimers().timeAccelerationFactor : 1);
+        },
         atRemain(){
-            return loc(`accelerated_time`);
+            return loc(`accelerated_time`,[this.effectiveSpeed()]);
         },
         pause(){
             $(`#pausegame`).removeClass('play');
@@ -585,6 +591,25 @@ vBind({
         },
         pausedesc(){
             return global.settings.pause ? loc('game_play') : loc('game_pause');
+        },
+        setSpeed(speed){
+            global.settings.gameSpeed = speed;
+            // If the loop is currently running, restart it so the worker picks up the new period right away.
+            // When the loop is stopped (game paused), the new speed is stored and applied by the next
+            // gameLoop('start') (e.g. on unpause).
+            if (webWorker.s){
+                gameLoop('stop');
+                gameLoop('start');
+            }
+        },
+        speeddesc(){
+            if (global.settings.at > 0){
+                return loc('game_speed_boost',[this.effectiveSpeed(),global.settings.gameSpeed,loopTimers().timeAccelerationFactor]);
+            }
+            return loc('game_speed');
+        },
+        accelDesc(){
+            return loc('game_speed_accel',[loopTimers().timeAccelerationFactor]);
         },
         showPet(){
             return global.race['pet'] ? true : false;
@@ -881,6 +906,7 @@ resourceAlt();
 
 var firstRun = true;
 var gene_sequence = global.arpa['sequence'] && global.arpa['sequence']['on'] ? global.arpa.sequence.on : 0;
+var blockGeneBuffer = false;
 function fastLoop(){
     if (!global.race['no_craft']){
         $('.craft').each(function(e){
@@ -11070,7 +11096,7 @@ function midLoop(){
             global.race.casting.total = total;
         }
 
-        let blockGeneBuffer = false;
+        blockGeneBuffer = false;
         if (global.tech['r_queue'] && global.r_queue.display){
             let idx = -1;
             let c_action = false;
@@ -11103,7 +11129,7 @@ function midLoop(){
                             }
                             else {
                                 if (reqMet){
-                                    if (!stop && t_time <= 1){
+                                    if (!stop){
                                         blockGeneBuffer = true;
                                     }
                                     time += t_time;
@@ -11269,7 +11295,7 @@ function midLoop(){
                             }
                         }
                         else {
-                            if (!stop && t_time <= 1 && t_action.cost && t_action.cost['Knowledge']){
+                            if (!stop && t_action.cost && t_action.cost['Knowledge']){
                                 blockGeneBuffer = true;
                             }
                             time += t_time;
@@ -11414,8 +11440,8 @@ function midLoop(){
         }
     }
 
-    if (global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 8){
-        buildGene(blockGeneBuffer);
+    if (!blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 8){
+        buildGene();
     }
 
     resourceAlt();
@@ -12695,7 +12721,7 @@ function longLoop(){
             drawTech();
         }
 
-        if (global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] === 7){
+        if (!blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] === 7){
             buildGene();
         }
 

@@ -960,6 +960,16 @@ export function index(){
                 <span class="season">{{ season() }}</span>
                 <b-tooltip :label="weather()" :aria-label="weather()" position="is-bottom" size="is-small" multilined animated><i id="weather" class="weather wi"></i></b-tooltip>
                 <b-tooltip :label="temp()" :aria-label="temp()" position="is-bottom" size="is-small" multilined animated><i id="temp" class="temp wi"></i></b-tooltip>
+                <b-dropdown v-model="s.gameSpeed" @change="setSpeed" class="gameSpeed" position="is-bottom-left" aria-role="list">
+                    <span slot="trigger" role="button" class="speedTrigger" :class="s.at > 0 ? 'has-text-caution' : 'has-text-warning'" :aria-label="speeddesc()">{{ effectiveSpeed() }}x</span>
+                    <b-dropdown-item custom aria-role="listitem" v-show="s.at > 0"><span class="speedAccel has-text-caution">{{ accelDesc() }}</span></b-dropdown-item>
+                    <b-dropdown-item separator v-show="s.at > 0"></b-dropdown-item>
+                    <b-dropdown-item :value="1" aria-role="listitem">1x</b-dropdown-item>
+                    <b-dropdown-item :value="2" aria-role="listitem">2x</b-dropdown-item>
+                    <b-dropdown-item :value="4" aria-role="listitem">4x</b-dropdown-item>
+                    <b-dropdown-item :value="8" aria-role="listitem">8x</b-dropdown-item>
+                    <b-dropdown-item :value="16" aria-role="listitem">16x</b-dropdown-item>
+                </b-dropdown>
                 <b-tooltip :label="atRemain()" v-show="s.at" :aria-label="atRemain()" position="is-bottom" size="is-small" multilined animated><span class="atime has-text-caution">{{ s.at | remain }}</span></b-tooltip>
                 <span role="button" class="atime" style="padding: 0 0.5rem; margin-left: 0.5rem; cursor: pointer" @click="pause" :aria-label="pausedesc()">
                     <span id="pausegame"></span>

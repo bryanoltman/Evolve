@@ -160,12 +160,17 @@ export function loopTimers(){
     const baseLongTimer = webWorker.longRatio * webWorkerMainTimer;
     // The constant by which the time is accelerated when atrack.t > 0.
     const timeAccelerationFactor = 2;
+    // User-selected playback speed (YouTube-style). Faster speed shortens the real-world loop period
+    // while webWorkerMainTimer (the logical ms per tick used for resource math) stays constant - the
+    // same mechanism accelerated time uses, so each tick advances the game by the same amount but ticks
+    // fire more often.
+    const gameSpeed = global.settings && global.settings.gameSpeed > 0 ? global.settings.gameSpeed : 1;
 
     const aTimeMultiplier = atrack.t > 0 ? 1 / timeAccelerationFactor : 1;
     return {
         webWorkerMainTimer,
-        mainTimer: Math.ceil(webWorkerMainTimer * aTimeMultiplier),
-        longTimer: Math.ceil(baseLongTimer * aTimeMultiplier),
+        mainTimer: Math.ceil(webWorkerMainTimer * aTimeMultiplier / gameSpeed),
+        longTimer: Math.ceil(baseLongTimer * aTimeMultiplier / gameSpeed),
         baseLongTimer,
         timeAccelerationFactor,
     };
