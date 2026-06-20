@@ -1,6 +1,6 @@
 import { global, set_alevel, set_ulevel } from './vars.js';
 import { clearElement, popover, flib, calc_mastery, masteryType, calcPillar, svgIcons, svgViewBox, format_emblem, getBaseIcon, sLevel, vBind, calcQueueMax, calcRQueueMax, messageQueue, eventActive, easterEgg, getHalloween, trickOrTreat, harmonyEffect } from './functions.js';
-import { races, genus_def } from './races.js';
+import { races, genus_def, planetTraits } from './races.js';
 import { actions } from './actions.js';
 import { universe_affixes, universe_types, piracy } from './space.js';
 import { monsters } from './portal.js';
@@ -469,6 +469,7 @@ export function drawAchieve(args){
 
     let trick = trickOrTreat(5,12,false);
     achieve.prepend(`<div class="has-text-warning">${loc("achieve_draw_achieve_earned",[earned,total])}${trick}</div>`);
+    drawRunUnlocks(achieve);
 
     vBind({
         el: '#achievePanel',
@@ -493,6 +494,167 @@ export function drawAchieve(args){
             drawAchieve();
         });
     }
+}
+
+const runUnlockSources = {
+    greatness: 'achieve_run_src_greatness',
+    bioseed: 'achieve_run_src_bioseed',
+    destruction: 'achieve_run_src_destruction',
+    ascension: 'achieve_run_src_ascension',
+    demonic: 'achieve_run_src_demonic',
+    ai: 'achieve_run_src_ai',
+    cumulative: 'achieve_run_src_cumulative'
+};
+
+// Predicts the achievements (and per-universe rank-ups) the CURRENT run is still able to grant
+// when it is completed. Mirrors the unlockAchieve calls in the reset/greatness functions, gated
+// only on parameters that are deterministic from the current save (species, genus, biome, planet
+// traits, universe, challenge level, and race/tech flags) so it never lists an impossible target
+// such as a genus/biome you are not playing. In-run live achievements (paradise, scrooge, ...) are
+// intentionally excluded; this is the "what finishing this run awards" view.
+export function currentRunUnlocks(){
+    let out = [];
+    if (!global.race || global.race.species === 'protoplasm' || !global.city || !global.city.biome){
+        return out;
+    }
+    let target = alevel();
+    if (target < 1){ return out; }
+    let affix = universeAffix();
+    let universe = global.race.universe;
+    let species = global.race.species;
+    let genus = races[species] ? (races[species].type === 'hybrid' ? global.race.maintype : races[species].type) : false;
+    let biome = global.city.biome;
+    let atmo = Array.isArray(global.city.ptrait) ? global.city.ptrait : [];
+    let seen = {};
+
+    function improveInfo(ach, small, rank){
+        let e = global.stats.achieve[ach];
+        if (!e){ return { improves: true, isNew: true }; }
+        let micro = universe === 'micro';
+        let baseGain = ((!micro && !small) || (micro && small)) && (e.l || 0) < rank;
+        let affixGain = affix !== 'l' ? ((e[affix] || 0) < rank) : ((e.l || 0) < rank);
+        return { improves: baseGain || affixGain, isNew: false };
+    }
+    function add(ach, source, small, rank){
+        if (!achievements[ach]){ return; }
+        rank = typeof rank === 'undefined' ? target : Math.min(rank, target);
+        if (rank < 1){ return; }
+        let info = improveInfo(ach, small === true, rank);
+        if (!info.improves){ return; }
+        if (seen[ach]){
+            if (rank > seen[ach].rank){ seen[ach].rank = rank; }
+            return;
+        }
+        let entry = { achievement: ach, source: source, rank: rank, isNew: info.isNew, small: small === true };
+        seen[ach] = entry;
+        out.push(entry);
+    }
+    // Cumulative milestones (creator/explorer/etc) are awarded by checkAchievements() inside every
+    // reset, counting matching achievements (incl. the one this run is about to grant) per rank.
+    function addBig(frag, name, num, source, pending, universeOnly){
+        if (!achievements[name]){ return; }
+        let bestL = 0, bestU = 0;
+        for (let level = target; level >= 1; level--){
+            let cl = 0, cu = 0;
+            Object.keys(achievements).forEach(function(k){
+                if (k.indexOf(frag) === -1){ return; }
+                let e = global.stats.achieve[k];
+                let lVal = e ? (e.l || 0) : 0;
+                let uVal = e ? (e[affix] || 0) : 0;
+                if (k === pending){ lVal = Math.max(lVal, target); uVal = Math.max(uVal, target); }
+                if (lVal >= level){ cl++; }
+                if (uVal >= level){ cu++; }
+            });
+            if (bestL === 0 && cl >= num){ bestL = level; }
+            if (bestU === 0 && cu >= num){ bestU = level; }
+            if (bestL && bestU){ break; }
+        }
+        let e = global.stats.achieve[name];
+        let baseImproves = !universeOnly && bestL > 0 && (e ? (e.l || 0) : 0) < bestL;
+        let affixImproves = bestU > 0 && (e ? (e[affix] || 0) : 0) < bestU;
+        if (!baseImproves && !affixImproves){ return; }
+        let rank = Math.max(affixImproves ? bestU : 0, baseImproves ? bestL : 0);
+        if (seen[name]){ if (rank > seen[name].rank){ seen[name].rank = rank; } return; }
+        let entry = { achievement: name, source: source, rank: rank, isNew: !e, small: false };
+        seen[name] = entry;
+        out.push(entry);
+    }
+
+    // --- Greatness wins: Bioseed, Matrix, Retirement, Garden of Eden, Terraform (+ Ascension atmo) ---
+    if (genus){ add(`genus_${genus}`, 'greatness'); }
+    add(`biome_${biome}`, 'greatness');
+    atmo.forEach(function(t){ if (planetTraits.hasOwnProperty(t)){ add(`atmo_${t}`, 'greatness'); } });
+    add('seeder', 'bioseed');
+    if (typeof global.tech['world_control'] === 'undefined'){ add('cult_of_personality', 'greatness'); }
+    let goodRocks = 0;
+    Object.keys(global.city.geology || {}).forEach(function(k){ if (global.city.geology[k] > 0){ goodRocks++; } });
+    if (goodRocks >= 4){ add('miners_dream', 'greatness'); }
+    if (global.race['gravity_well']){ add('escape_velocity', 'bioseed'); }
+    if (global.race['truepath']){ add('exodus', 'bioseed'); }
+    if (atmo.includes('dense') && universe === 'heavy'){ add('double_density', 'bioseed'); }
+    if (global.race['cataclysm']){ add('iron_will', 'greatness', false, 5); }
+    if (global.race['steelen'] && global.race['steelen'] >= 1){ add('steelen', 'bioseed'); }
+    if (global.race['gross_enabled'] && global.race['ooze'] && species !== 'custom' && species !== 'sludge' && species !== 'hybrid'){ add('gross', 'greatness'); }
+
+    // --- Ascension / Apotheosis ---
+    if (!global.galaxy || !global.galaxy.hasOwnProperty('dreadnought') || global.galaxy.dreadnought.count === 0){ add('dreaded', 'ascension'); }
+
+    // --- Destruction: Blackhole / Big Bang, Vacuum, Demonic Infusion, AI Apocalypse, Cataclysm ---
+    add(`extinct_${species}`, 'destruction');
+    switch (universe){
+        case 'heavy': add('heavy', 'destruction'); break;
+        case 'antimatter': add('canceled', 'destruction'); break;
+        case 'evil': add('eviltwin', 'destruction'); break;
+        case 'micro': add('microbang', 'destruction', true); break;
+        case 'standard': add('whitehole', 'destruction'); break;
+    }
+    if (global.space && global.space.hasOwnProperty('spaceport') && global.space.spaceport.count === 0){ add('red_dead', 'destruction'); }
+    if (global.race['decay']){ add('dissipated', 'destruction'); }
+    add('obsolete', 'ai');
+    if (global.race['witch_hunter'] && global.tech['forbidden'] >= 5 && universe === 'magic'){ add('nightmare', 'demonic'); }
+    else { add('corrupted', 'demonic'); }
+    if (global.race['cataclysm']){ add('shaken', 'destruction'); add('failed_history', 'destruction'); }
+
+    // --- Cumulative milestones (checkAchievements at any reset) ---
+    addBig('genus_', 'creator', 9, 'cumulative', genus ? `genus_${genus}` : false);
+    addBig('biome_', 'explorer', 6, 'cumulative', `biome_${biome}`);
+    addBig('extinct_', 'mass_extinction', 25, 'cumulative', `extinct_${species}`);
+    if (universe === 'evil'){ addBig('extinct_', 'vigilante', 12, 'cumulative', `extinct_${species}`, true); }
+    if (universe === 'heavy'){ addBig('genus_', 'heavyweight', 8, 'cumulative', genus ? `genus_${genus}` : false, true); }
+
+    return out;
+}
+
+function runUnlockEmblem(ach, rank, size){
+    let icon;
+    switch (global.race.universe){
+        case 'antimatter': icon = 'atom'; break;
+        case 'evil': icon = 'evil'; break;
+        case 'heavy': icon = 'heavy'; break;
+        case 'micro': icon = 'micro'; break;
+        case 'magic': icon = 'magic'; break;
+        default: icon = getBaseIcon(ach,'achievement'); break;
+    }
+    return `<p class="flair"><svg class="star${rank}" version="1.1" x="0px" y="0px" width="${size}px" height="${size}px" viewBox="${svgViewBox(icon)}" xml:space="preserve">${svgIcons(icon)}</svg></p>`;
+}
+
+function drawRunUnlocks(achieve){
+    let unlocks = currentRunUnlocks();
+    let body = '';
+    if (unlocks.length === 0){
+        body = `<div class="runUnlockEmpty has-text-grey">${loc('achieve_available_run_none')}</div>`;
+    }
+    else {
+        unlocks.sort(function(a,b){ return a.isNew === b.isNew ? a.achievement.localeCompare(b.achievement) : (a.isNew ? -1 : 1); });
+        unlocks.forEach(function(u){
+            let a = achievements[u.achievement];
+            let emblem = runUnlockEmblem(u.achievement, u.rank, 16);
+            let tag = `<span class="runUnlockTag has-text-${u.isNew ? 'success' : 'info'}">${loc(u.isNew ? 'achieve_run_new' : 'achieve_run_upgrade')}</span>`;
+            let src = `<span class="runUnlockSrc has-text-caution">${loc(runUnlockSources[u.source])}</span>`;
+            body += `<div class="achievement runUnlock" title="${a.flair}"><span class="has-text-warning">${a.name}</span><span>${a.desc}</span><span class="runUnlockMeta">${src}${tag}</span>${emblem}</div>`;
+        });
+    }
+    achieve.prepend(`<div id="runUnlocks" class="runUnlocks"><div class="runUnlocksTitle has-text-caution">${loc('achieve_available_run',[unlocks.length])}</div><div class="runUnlocksList">${body}</div></div>`);
 }
 
 export function challengeIcon(){
