@@ -6010,6 +6010,31 @@ export function gainTech(action){
     renderEdenic();
 }
 
+export function govResearch(){
+    // Governor auto-research: buy every currently-available, affordable technology.
+    // Mirrors drawTech()'s availability filters so it only purchases techs the player
+    // could click right now (correct path/trait/gene/tech qualifications and met
+    // prerequisites), and only when the resource/knowledge cost is affordable.
+    let bought = false;
+    Object.keys(actions.tech).forEach(function(tech){
+        if (!checkTechPath(tech) || checkOldTech(tech)){
+            return;
+        }
+        let c_action = actions.tech[tech];
+        if (!checkTechQualifications(c_action,tech) || checkTechRequirements(tech,false) !== 'ok'){
+            return;
+        }
+        if (checkAffordable(c_action) && c_action.action({ isQueue: false })){
+            gainTech(tech);
+            if (c_action['post']){
+                c_action.post();
+            }
+            bought = true;
+        }
+    });
+    return bought;
+}
+
 export var cLabels = global.settings['cLabels'];
 export function drawCity(){
     if (!global.settings.tabLoad && (global.settings.civTabs !== 1 || global.settings.spaceTabs !== 0)){

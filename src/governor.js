@@ -1,7 +1,7 @@
 import { global, seededRandom, p_on, breakdown } from './vars.js';
 import { vBind, popover, tagEvent, calcQueueMax, calcRQueueMax, clearElement, adjustCosts, decodeStructId, timeCheck, arpaTimeCheck, hoovedRename } from './functions.js';
 import { races } from './races.js';
-import { actions, checkCityRequirements, housingLabel, wardenLabel, updateQueueNames, checkAffordable, drawTech, drawCity } from './actions.js';
+import { actions, checkCityRequirements, housingLabel, wardenLabel, updateQueueNames, checkAffordable, drawTech, drawCity, govResearch } from './actions.js';
 import { govCivics, govTitle } from './civics.js';
 import { crateGovHook, atomic_mass } from './resources.js';
 import { checkHellRequirements, mechSize, mechCost, validWeapons, validEquipment } from './portal.js';
@@ -100,6 +100,14 @@ export const gmen = {
         title: [loc('governor_bureaucrat_t1'),{ m: loc('governor_bureaucrat_t2m'), f: loc('governor_bureaucrat_t2f') },loc('governor_bureaucrat_t3')],
         traits: {
             organizer: 1
+        }
+    },
+    scientist: {
+        name: loc('governor_scientist'),
+        desc: loc('governor_scientist_desc'),
+        title: [loc('governor_scientist_t1'),loc('governor_scientist_t2'),loc('governor_scientist_t3')],
+        traits: {
+            researcher: 1
         }
     }
 };
@@ -303,6 +311,11 @@ export const gov_traits = {
             }
             return [b ? 2 : 1]; 
         },
+    },
+    researcher: {
+        name: loc(`gov_trait_researcher`),
+        effect(b){ return loc(`gov_trait_researcher_effect`); },
+        vars(b){ return [1]; },
     }
 };
 
@@ -373,6 +386,9 @@ export function govern(){
                 gov_tasks[global.race.governor.tasks[`t${n}`]].task();
             }
         });
+        if (govActive('researcher',0)){
+            govResearch();
+        }
     }
 }
 
@@ -733,7 +749,7 @@ export function drawnGovernOffice(){
                 let res = global.race.universe === 'antimatter' ? 'AntiPlasmid' : 'Plasmid';
                 if (global.prestige[res].count >= cost){
                     global.prestige[res].count -= cost;
-                    global.race.governor['candidates'] = genGovernor(10);
+                    global.race.governor['candidates'] = genGovernor(Object.keys(gmen).length);
                     if (global.race.governor.hasOwnProperty('f')){
                         global.race.governor.f++;
                     }
@@ -791,8 +807,12 @@ function appointGovernor(){
 
     if (!global.race.hasOwnProperty('governor') || !global.race.governor.hasOwnProperty('candidates')){
         global.race['governor'] = {
-            candidates: genGovernor(10)
+            candidates: genGovernor(Object.keys(gmen).length)
         };
+    }
+    else if (global.race.governor.candidates.length < Object.keys(gmen).length){
+        // A new governor background was added since this list was rolled; refresh so every type appears.
+        global.race.governor.candidates = genGovernor(Object.keys(gmen).length);
     }
 
     govern.append($(`<div class="appoint header"><span class="has-text-caution">${loc(`governor_candidate`)}</span><span class="has-text-caution">${loc(`governor_background`)}</span><span></span><div>`));
