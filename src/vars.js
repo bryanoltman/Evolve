@@ -1363,7 +1363,7 @@ if (!global.settings.hasOwnProperty('lowPowerBalance')){
     global.settings['lowPowerBalance'] = false;
 }
 
-if (![1,2,4,8,16,100,1000].includes(global.settings.gameSpeed)){
+if (![1,2,4,8,16,100].includes(global.settings.gameSpeed)){
     global.settings['gameSpeed'] = 1;
 }
 

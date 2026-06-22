@@ -871,6 +871,15 @@ export function execGameLoops(periods = 1){
     const maxCatchUp = webWorker.longRatio * 12;
     periods = Math.min(periods, maxCatchUp); 
 
+    // Wall-clock budget per call. At high speed (100x) on a save the machine cannot
+    // simulate in real time, the worker hands us catch-up batches that grow up to
+    // maxCatchUp; running all of them in one synchronous task blocks the browser from
+    // painting, so the UI stutters and visibly "updates slower" the faster the game runs.
+    // Bounding each call to a few ms lets the browser repaint between batches (the worker
+    // re-sends the remaining periods as soon as we ack), keeping UI cadence steady at every
+    // speed. Throughput is unchanged: the per-tick cost still sets the real speed ceiling.
+    const deadline = performance.now() + 10;
+
     while (webWorker.s && periods--){
         ++loopTick;
         const doMid = (loopTick % webWorker.midRatio) === 0;
@@ -886,6 +895,9 @@ export function execGameLoops(periods = 1){
 
         // Overflow prevention
         if (doMid && doLong){ loopTick = 0; }
+
+        // Yield to the browser if our time slice is spent; the worker resends the rest.
+        if (performance.now() >= deadline){ break; }
     }
 }
 
@@ -896,6 +908,9 @@ if (window.Worker){
         switch (data.loop) {
             case 'main':
                 execGameLoops(data.periods);
+                // Acknowledge completion so the worker releases the next batch. This
+                // back-pressure caps the main-thread queue at a single in-flight message.
+                webWorker.w.postMessage({ loop: 'ack' });
                 break;
         }
     }, false);

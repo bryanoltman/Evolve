@@ -7,6 +7,15 @@ var loopTargTs;     // Target time for next timer to fire
 var timerId;        // For clearing the timer
 var loopRun;        // Safety guarantee against race condition in timer clear (possibly unnecessary)
 
+// Back-pressure between the worker and the main thread. The main thread acknowledges each
+// batch once execGameLoops finishes; until then we hold off posting and let periods pile up
+// in pendingPeriods. This keeps the worker from enqueuing 'main' messages faster than the
+// main thread can drain them - that unbounded backlog is what previously capped real
+// throughput below the selected speed and kept the game running flat-out for a while after
+// the player dropped from 100x/1000x back down to a slower multiplier.
+var pendingPeriods = 0; // Periods accrued but not yet handed to the main thread
+var inFlight = false;   // True while a batch is awaiting acknowledgement
+
 self.addEventListener('message', function(e){
     const data = e.data;
     switch (data.loop) {
@@ -15,6 +24,8 @@ self.addEventListener('message', function(e){
             loopHist = new Array(loopN).fill(0);
             loopSkew = 0;
             loopRun = true;
+            pendingPeriods = 0;
+            inFlight = false;
             loopTargTs = performance.now() + loopInterval;
             timerId = setTimeout(lowDriftTimer, loopInterval);
             break;
@@ -22,8 +33,26 @@ self.addEventListener('message', function(e){
             loopRun = false;
             clearTimeout(timerId);
             break;
+        case 'ack':
+            // The main thread finished the previous batch. Release back-pressure and flush
+            // anything that accrued while it was busy into a single catch-up batch.
+            inFlight = false;
+            flush();
+            break;
     };
   }, false);
+
+// Hands accrued periods to the main thread, but only when no batch is in flight and the
+// timer is still running. While the main thread is busy, periods keep accumulating here, so
+// the next batch performs several turns' worth of work in one execGameLoops call instead of
+// one message (and one round-trip) per turn.
+function flush(){
+    if (!loopRun || inFlight || pendingPeriods <= 0){ return; }
+    const periods = pendingPeriods;
+    pendingPeriods = 0;
+    inFlight = true;
+    self.postMessage({ loop: 'main', periods: periods });
+}
 
 function lowDriftTimer(){
     const ts = performance.now();
@@ -59,8 +88,10 @@ function lowDriftTimer(){
         timerId = setTimeout(lowDriftTimer, timeout);
     }
 
-    // Not wrapped in if(loopRun): the game loop has separate pause state tracking
-    self.postMessage({ loop: 'main', periods: periods });
+    // Accrue this tick's periods, then hand them off subject to back-pressure. Not gated on
+    // pause here: gameLoop('start'/'stop') drives loopRun, and flush() respects it.
+    pendingPeriods += periods;
+    flush();
 
     if (++loopIdx === loopN){ loopIdx = 0; }
 }

@@ -970,7 +970,6 @@ export function index(){
                     <b-dropdown-item :value="8" aria-role="listitem">8x</b-dropdown-item>
                     <b-dropdown-item :value="16" aria-role="listitem">16x</b-dropdown-item>
                     <b-dropdown-item :value="100" aria-role="listitem">100x</b-dropdown-item>
-                    <b-dropdown-item :value="1000" aria-role="listitem">1000x</b-dropdown-item>
                 </b-dropdown>
                 <b-tooltip :label="atRemain()" v-show="s.at" :aria-label="atRemain()" position="is-bottom" size="is-small" multilined animated><span class="atime has-text-caution">{{ s.at | remain }}</span></b-tooltip>
                 <span role="button" class="atime" style="padding: 0 0.5rem; margin-left: 0.5rem; cursor: pointer" @click="pause" :aria-label="pausedesc()">
