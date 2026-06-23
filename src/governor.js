@@ -101,14 +101,6 @@ export const gmen = {
         traits: {
             organizer: 1
         }
-    },
-    scientist: {
-        name: loc('governor_scientist'),
-        desc: loc('governor_scientist_desc'),
-        title: [loc('governor_scientist_t1'),loc('governor_scientist_t2'),loc('governor_scientist_t3')],
-        traits: {
-            researcher: 1
-        }
     }
 };
 
@@ -311,11 +303,6 @@ export const gov_traits = {
             }
             return [b ? 2 : 1]; 
         },
-    },
-    researcher: {
-        name: loc(`gov_trait_researcher`),
-        effect(b){ return loc(`gov_trait_researcher_effect`); },
-        vars(b){ return [1]; },
     }
 };
 
@@ -373,7 +360,26 @@ function genGovernor(setSize){
     return governors;
 }
 
+function sanitizeGovernor(){
+    if (!global.race.hasOwnProperty('governor')){ return; }
+    let gov = global.race.governor;
+    // An appointed governor whose background was removed from the game can no longer render; drop it.
+    if (gov.hasOwnProperty('g') && !gmen.hasOwnProperty(gov.g.bg)){
+        delete gov.g;
+        delete gov.tasks;
+    }
+    // Discard any candidates referencing a removed background.
+    if (gov.hasOwnProperty('candidates')){
+        gov.candidates = gov.candidates.filter(function(c){ return gmen.hasOwnProperty(c.bg); });
+    }
+    // Left without an appointed governor and without a usable candidate list: roll a fresh one.
+    if (!gov.hasOwnProperty('g') && (!gov.hasOwnProperty('candidates') || gov.candidates.length === 0)){
+        gov.candidates = genGovernor(10);
+    }
+}
+
 export function govern(){
+    sanitizeGovernor();
     if (global.genes['governor'] && global.tech['governor'] && global.race['governor'] && global.race.governor['g'] && global.race.governor['tasks']){
         let cnt = [0,1,2];
         if (global.genes.governor >= 2){
@@ -386,9 +392,6 @@ export function govern(){
                 gov_tasks[global.race.governor.tasks[`t${n}`]].task();
             }
         });
-        if (govActive('researcher',0)){
-            govResearch();
-        }
     }
 }
 
@@ -397,6 +400,7 @@ export function defineGovernor(){
         return;
     }
     if (global.genes['governor'] && global.tech['governor']){
+        sanitizeGovernor();
         clearElement($('#r_govern1'));
         if (global.race.hasOwnProperty('governor') && !global.race.governor.hasOwnProperty('candidates')){
             drawnGovernOffice();
@@ -749,7 +753,7 @@ export function drawnGovernOffice(){
                 let res = global.race.universe === 'antimatter' ? 'AntiPlasmid' : 'Plasmid';
                 if (global.prestige[res].count >= cost){
                     global.prestige[res].count -= cost;
-                    global.race.governor['candidates'] = genGovernor(Object.keys(gmen).length);
+                    global.race.governor['candidates'] = genGovernor(10);
                     if (global.race.governor.hasOwnProperty('f')){
                         global.race.governor.f++;
                     }
@@ -807,12 +811,8 @@ function appointGovernor(){
 
     if (!global.race.hasOwnProperty('governor') || !global.race.governor.hasOwnProperty('candidates')){
         global.race['governor'] = {
-            candidates: genGovernor(Object.keys(gmen).length)
+            candidates: genGovernor(10)
         };
-    }
-    else if (global.race.governor.candidates.length < Object.keys(gmen).length){
-        // A new governor background was added since this list was rolled; refresh so every type appears.
-        global.race.governor.candidates = genGovernor(Object.keys(gmen).length);
     }
 
     govern.append($(`<div class="appoint header"><span class="has-text-caution">${loc(`governor_candidate`)}</span><span class="has-text-caution">${loc(`governor_background`)}</span><span></span><div>`));
@@ -864,7 +864,7 @@ function appointGovernor(){
 }
 
 export function govActive(trait,val){
-    if (global.race.hasOwnProperty('governor') && global.race.governor.hasOwnProperty('g')){
+    if (global.race.hasOwnProperty('governor') && global.race.governor.hasOwnProperty('g') && gmen.hasOwnProperty(global.race.governor.g.bg)){
         return gmen[global.race.governor.g.bg].traits[trait] ? gov_traits[trait].vars()[val] : false;
     }
     return false;
@@ -1868,6 +1868,17 @@ export const gov_tasks = {
                         }
                     }
                 }
+            }
+        }
+    },
+    research: { // Auto Research
+        name: loc(`gov_task_research`),
+        req(){
+            return true;
+        },
+        task(){
+            if ( $(this)[0].req() ){
+                govResearch();
             }
         }
     },
