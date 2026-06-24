@@ -14,7 +14,7 @@ import { asphodelResist, mechStationEffect, renderEdenic } from './edenic.js';
 import { renderTauCeti, syndicate, shipFuelUse, spacePlanetStats, genXYcoord, shipCrewSize, tpStorageMultiplier, tritonWar, sensorRange, erisWar, calcAIDrift, drawMap, tauEnabled, shipCosts, buildTPShipQueue } from './truepath.js';
 import { arpa, buildArpa, sequenceLabs } from './arpa.js';
 import { events, eventList } from './events.js';
-import { defineGovernor, govern, govActive, removeTask } from './governor.js';
+import { defineGovernor, govern, govActive, govTaskActive, removeTask } from './governor.js';
 import { production, highPopAdjust, teamster, factoryBonus } from './prod.js';
 import { swissKnife } from './tech.js';
 import { vacuumCollapse } from './resets.js';
@@ -11455,7 +11455,7 @@ function midLoop(){
         }
     }
 
-    if (!blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 8){
+    if (!blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 8 && !govTaskActive('research')){
         buildGene();
     }
 
@@ -12736,7 +12736,7 @@ function longLoop(){
             drawTech();
         }
 
-        if (!blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] === 7){
+        if (!blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] === 7 && !govTaskActive('research')){
             buildGene();
         }
 
@@ -12763,6 +12763,10 @@ function longLoop(){
         }
 
         govern();
+        // Auto Research governor task takes Knowledge priority; build genes only with the surplus it leaves.
+        if (govTaskActive('research') && !blockGeneBuffer && global.arpa.sequence && global.arpa.sequence['auto'] && global.tech['genetics'] && global.tech['genetics'] >= 7){
+            buildGene();
+        }
     }
 
     // Event triggered

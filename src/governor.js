@@ -395,6 +395,19 @@ export function govern(){
     }
 }
 
+export function govTaskActive(task){
+    if (!(global.genes['governor'] && global.tech['governor'] && global.race['governor'] && global.race.governor['g'] && global.race.governor['tasks'])){
+        return false;
+    }
+    let cnt = [0,1,2];
+    if (global.genes.governor >= 2){
+        cnt.push(cnt.length);
+        if (govActive('organizer',0)){ cnt.push(cnt.length); }
+    }
+    if (govActive('organizer',0)){ cnt.push(cnt.length); }
+    return cnt.some(function(n){ return global.race.governor.tasks[`t${n}`] === task; });
+}
+
 export function defineGovernor(){
     if (!global.settings.tabLoad && (global.settings.civTabs !== 2 || global.settings.govTabs !== 0)){
         return;

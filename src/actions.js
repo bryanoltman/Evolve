@@ -6029,6 +6029,7 @@ export function govResearch(){
             if (c_action['post']){
                 c_action.post();
             }
+            messageQueue(loc('research_success',[typeof c_action.title === 'string' ? c_action.title : c_action.title()]),'success',false,['research_queue']);
             bought = true;
         }
     });
